@@ -19,7 +19,7 @@ import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
  */
 @javax.annotation.Generated(
     value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/reflection/v1alpha/reflection.proto")
+    comments = "Source: grpc/reflection/v1alpha/reflection.proto")
 public final class ServerReflectionGrpc {
 
   private ServerReflectionGrpc() {}
@@ -41,22 +41,21 @@ public final class ServerReflectionGrpc {
     if ((getServerReflectionInfoMethod = ServerReflectionGrpc.getServerReflectionInfoMethod) == null) {
       synchronized (ServerReflectionGrpc.class) {
         if ((getServerReflectionInfoMethod = ServerReflectionGrpc.getServerReflectionInfoMethod) == null) {
-          ServerReflectionGrpc.getServerReflectionInfoMethod = getServerReflectionInfoMethod = 
+          ServerReflectionGrpc.getServerReflectionInfoMethod = getServerReflectionInfoMethod =
               io.grpc.MethodDescriptor.<io.grpc.reflection.v1alpha.ServerReflectionRequest, io.grpc.reflection.v1alpha.ServerReflectionResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.reflection.v1alpha.ServerReflection", "ServerReflectionInfo"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ServerReflectionInfo"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.v1alpha.ServerReflectionRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.v1alpha.ServerReflectionResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ServerReflectionMethodDescriptorSupplier("ServerReflectionInfo"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ServerReflectionMethodDescriptorSupplier("ServerReflectionInfo"))
+              .build();
         }
-     }
-     return getServerReflectionInfoMethod;
+      }
+    }
+    return getServerReflectionInfoMethod;
   }
 
   /**

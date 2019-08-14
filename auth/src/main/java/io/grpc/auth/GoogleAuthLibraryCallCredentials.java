@@ -22,20 +22,17 @@ import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
-import io.grpc.Attributes;
-import io.grpc.CallCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.security.PrivateKey;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +44,9 @@ import javax.annotation.Nullable;
 /**
  * Wraps {@link Credentials} as a {@link CallCredentials}.
  */
-final class GoogleAuthLibraryCallCredentials implements CallCredentials {
+// TODO(zhangkun83): remove the suppression after we change the base class to CallCredential
+@SuppressWarnings("deprecation")
+final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials2 {
   private static final Logger log
       = Logger.getLogger(GoogleAuthLibraryCallCredentials.class.getName());
   private static final JwtHelper jwtHelper
@@ -88,15 +87,9 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
   public void thisUsesUnstableApi() {}
 
   @Override
-  public void applyRequestMetadata(MethodDescriptor<?, ?> method, Attributes attrs,
-      Executor appExecutor, final MetadataApplier applier) {
-    SecurityLevel security = attrs.get(ATTR_SECURITY_LEVEL);
-    if (security == null) {
-      // Although the API says ATTR_SECURITY_LEVEL is required, no one was really looking at it thus
-      // there may be transports that got away without setting it.  Now we start to check it, it'd
-      // be less disruptive to tolerate nulls.
-      security = SecurityLevel.NONE;
-    }
+  public void applyRequestMetadata(
+      RequestInfo info, Executor appExecutor, final MetadataApplier applier) {
+    SecurityLevel security = info.getSecurityLevel();
     if (requirePrivacy && security != SecurityLevel.PRIVACY_AND_INTEGRITY) {
       applier.fail(Status.UNAUTHENTICATED
           .withDescription("Credentials require channel with PRIVACY_AND_INTEGRITY security level. "
@@ -104,10 +97,10 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
       return;
     }
 
-    String authority = checkNotNull(attrs.get(ATTR_AUTHORITY), "authority");
+    String authority = checkNotNull(info.getAuthority(), "authority");
     final URI uri;
     try {
-      uri = serviceUri(authority, method);
+      uri = serviceUri(authority, info.getMethodDescriptor());
     } catch (StatusException e) {
       applier.fail(e.getStatus());
       return;
@@ -166,7 +159,7 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
     // Always use HTTPS, by definition.
     final String scheme = "https";
     final int defaultPort = 443;
-    String path = "/" + MethodDescriptor.extractFullServiceName(method.getFullMethodName());
+    String path = "/" + method.getServiceName();
     URI uri;
     try {
       uri = new URI(scheme, authority, path, null, null);
@@ -191,7 +184,6 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
     }
   }
 
-  @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
   private static Metadata toHeaders(@Nullable Map<String, List<String>> metadata) {
     Metadata headers = new Metadata();
     if (metadata != null) {
@@ -252,31 +244,75 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
     return rawGoogleCredentialsClass.asSubclass(Credentials.class);
   }
 
+  private static class MethodPair {
+    private final Method getter;
+    private final Method builderSetter;
+
+    private MethodPair(Method getter, Method builderSetter) {
+      this.getter = getter;
+      this.builderSetter = builderSetter;
+    }
+
+    private void apply(Credentials credentials, Object builder)
+        throws InvocationTargetException, IllegalAccessException {
+      builderSetter.invoke(builder, getter.invoke(credentials));
+    }
+  }
+
   @VisibleForTesting
   static class JwtHelper {
     private final Class<? extends Credentials> serviceAccountClass;
-    private final Constructor<? extends Credentials> jwtConstructor;
+    private final Method newJwtBuilder;
+    private final Method build;
     private final Method getScopes;
-    private final Method getClientId;
-    private final Method getClientEmail;
-    private final Method getPrivateKey;
-    private final Method getPrivateKeyId;
+    private final List<MethodPair> methodPairs;
 
     public JwtHelper(Class<?> rawServiceAccountClass, ClassLoader loader)
         throws ClassNotFoundException, NoSuchMethodException {
       serviceAccountClass = rawServiceAccountClass.asSubclass(Credentials.class);
       getScopes = serviceAccountClass.getMethod("getScopes");
-      getClientId = serviceAccountClass.getMethod("getClientId");
-      getClientEmail = serviceAccountClass.getMethod("getClientEmail");
-      getPrivateKey = serviceAccountClass.getMethod("getPrivateKey");
-      getPrivateKeyId = serviceAccountClass.getMethod("getPrivateKeyId");
       Class<? extends Credentials> jwtClass = Class.forName(
           "com.google.auth.oauth2.ServiceAccountJwtAccessCredentials", false, loader)
           .asSubclass(Credentials.class);
-      jwtConstructor
-          = jwtClass.getConstructor(String.class, String.class, PrivateKey.class, String.class);
+      newJwtBuilder = jwtClass.getDeclaredMethod("newBuilder");
+      Class<?> builderClass = newJwtBuilder.getReturnType();
+      build = builderClass.getMethod("build");
+
+      methodPairs = new ArrayList<>();
+
+      {
+        Method getter = serviceAccountClass.getMethod("getClientId");
+        Method setter = builderClass.getMethod("setClientId", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
+      {
+        Method getter = serviceAccountClass.getMethod("getClientEmail");
+        Method setter = builderClass.getMethod("setClientEmail", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
+      {
+        Method getter = serviceAccountClass.getMethod("getPrivateKey");
+        Method setter = builderClass.getMethod("setPrivateKey", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
+      {
+        Method getter = serviceAccountClass.getMethod("getPrivateKey");
+        Method setter = builderClass.getMethod("setPrivateKey", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
     }
 
+    /**
+     * This method tries to convert a {@link Credentials} object to a
+     * ServiceAccountJwtAccessCredentials.  The original credentials will be returned if:
+     * <ul>
+     *   <li> The Credentials is not a ServiceAccountCredentials</li>
+     *   <li> The ServiceAccountCredentials has scopes</li>
+     *   <li> Something unexpected happens </li>
+     * </ul>
+     * @param creds the Credentials to convert
+     * @return either the original Credentials or a fully formed ServiceAccountJwtAccessCredentials.
+     */
     public Credentials tryServiceAccountToJwt(Credentials creds) {
       if (!serviceAccountClass.isInstance(creds)) {
         return creds;
@@ -289,16 +325,19 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
           // Leave as-is, since the scopes may limit access within the service.
           return creds;
         }
-        return jwtConstructor.newInstance(
-            getClientId.invoke(creds),
-            getClientEmail.invoke(creds),
-            getPrivateKey.invoke(creds),
-            getPrivateKeyId.invoke(creds));
+        // Create the JWT Credentials Builder
+        Object builder = newJwtBuilder.invoke(null);
+
+        // Get things from the credentials, and set them on the builder.
+        for (MethodPair pair : this.methodPairs) {
+          pair.apply(creds, builder);
+        }
+
+        // Call builder.build()
+        return (Credentials) build.invoke(builder);
       } catch (IllegalAccessException ex) {
         caughtException = ex;
       } catch (InvocationTargetException ex) {
-        caughtException = ex;
-      } catch (InstantiationException ex) {
         caughtException = ex;
       }
       if (caughtException != null) {

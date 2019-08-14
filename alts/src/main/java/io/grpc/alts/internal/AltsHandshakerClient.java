@@ -21,15 +21,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.protobuf.ByteString;
 import io.grpc.Status;
-import io.grpc.alts.internal.Handshaker.HandshakeProtocol;
-import io.grpc.alts.internal.Handshaker.HandshakerReq;
-import io.grpc.alts.internal.Handshaker.HandshakerResp;
-import io.grpc.alts.internal.Handshaker.HandshakerResult;
-import io.grpc.alts.internal.Handshaker.HandshakerStatus;
-import io.grpc.alts.internal.Handshaker.NextHandshakeMessageReq;
-import io.grpc.alts.internal.Handshaker.ServerHandshakeParameters;
-import io.grpc.alts.internal.Handshaker.StartClientHandshakeReq;
-import io.grpc.alts.internal.Handshaker.StartServerHandshakeReq;
 import io.grpc.alts.internal.HandshakerServiceGrpc.HandshakerServiceStub;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -145,7 +136,7 @@ class AltsHandshakerClient {
       throw new IllegalStateException("Could not get enough key data from the handshake.");
     }
     byte[] key = new byte[KEY_LENGTH];
-    result.getKeyData().copyTo(key, 0, 0, KEY_LENGTH);
+    result.getKeyData().substring(0, KEY_LENGTH).copyTo(key, 0);
     return key;
   }
 

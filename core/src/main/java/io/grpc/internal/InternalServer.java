@@ -16,9 +16,11 @@
 
 package io.grpc.internal;
 
-import io.grpc.internal.Channelz.SocketStats;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
 import java.io.IOException;
-import java.util.List;
+import java.net.SocketAddress;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -40,18 +42,20 @@ public interface InternalServer {
   /**
    * Initiates an orderly shutdown of the server. Existing transports continue, but new transports
    * will not be created (once {@link ServerListener#serverShutdown()} callback is called). This
-   * method may only be called once.
+   * method may only be called once.  Blocks until the listening socket(s) have been closed.  If
+   * interrupted, this method will not wait for the close to complete, but it will happen
+   * asynchronously.
    */
   void shutdown();
 
   /**
-   * Returns what underlying port the server is listening on, or -1 if the port number is not
-   * available or does not make sense.
+   * Returns the listening socket address.  May change after {@link start(ServerListener)} is
+   * called.
    */
-  int getPort();
+  SocketAddress getListenSocketAddress();
 
   /**
-   * Returns the listen sockets of this server. May return an empty list but never returns null.
+   * Returns the listen socket stats of this server. May return {@code null}.
    */
-  List<Instrumented<SocketStats>> getListenSockets();
+  @Nullable InternalInstrumented<SocketStats> getListenSocketStats();
 }

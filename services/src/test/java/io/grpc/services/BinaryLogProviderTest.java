@@ -40,7 +40,6 @@ import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
-import io.grpc.internal.IoUtils;
 import io.grpc.internal.NoopClientCall;
 import io.grpc.internal.NoopServerCall;
 import java.io.ByteArrayInputStream;
@@ -80,8 +79,8 @@ public class BinaryLogProviderTest {
           .setSafe(true)
           .setSampledToLocalTracing(true)
           .build();
-  private final List<byte[]> binlogReq = new ArrayList<byte[]>();
-  private final List<byte[]> binlogResp = new ArrayList<byte[]>();
+  private final List<byte[]> binlogReq = new ArrayList<>();
+  private final List<byte[]> binlogResp = new ArrayList<>();
   private final BinaryLogProvider binlogProvider = new BinaryLogProvider() {
     @Override
     public ServerInterceptor getServerInterceptor(String fullMethodName) {
@@ -98,13 +97,13 @@ public class BinaryLogProviderTest {
   @Test
   public void wrapChannel_methodDescriptor() throws Exception {
     final AtomicReference<MethodDescriptor<?, ?>> methodRef =
-        new AtomicReference<MethodDescriptor<?, ?>>();
+        new AtomicReference<>();
     Channel channel = new Channel() {
       @Override
       public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
           MethodDescriptor<RequestT, ResponseT> method, CallOptions callOptions) {
         methodRef.set(method);
-        return new NoopClientCall<RequestT, ResponseT>();
+        return new NoopClientCall<>();
       }
 
       @Override
@@ -119,9 +118,9 @@ public class BinaryLogProviderTest {
 
   @Test
   public void wrapChannel_handler() throws Exception {
-    final List<byte[]> serializedReq = new ArrayList<byte[]>();
+    final List<byte[]> serializedReq = new ArrayList<>();
     final AtomicReference<ClientCall.Listener<?>> listener =
-        new AtomicReference<ClientCall.Listener<?>>();
+        new AtomicReference<>();
     Channel channel = new Channel() {
       @Override
       public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -146,7 +145,7 @@ public class BinaryLogProviderTest {
     };
     Channel wChannel = binlogProvider.wrapChannel(channel);
     ClientCall<String, Integer> clientCall = wChannel.newCall(method, CallOptions.DEFAULT);
-    final List<Integer> observedResponse = new ArrayList<Integer>();
+    final List<Integer> observedResponse = new ArrayList<>();
     clientCall.start(
         new NoopClientCall.NoopClientCallListener<Integer>() {
           @Override
@@ -224,9 +223,9 @@ public class BinaryLogProviderTest {
   @Test
   public void wrapMethodDefinition_handler() throws Exception {
     // The request as seen by the user supplied server code
-    final List<String> observedRequest = new ArrayList<String>();
+    final List<String> observedRequest = new ArrayList<>();
     final AtomicReference<ServerCall<String, Integer>> serverCall =
-        new AtomicReference<ServerCall<String, Integer>>();
+        new AtomicReference<>();
     ServerMethodDefinition<String, Integer> methodDef =
         ServerMethodDefinition.create(
             method,
@@ -244,7 +243,7 @@ public class BinaryLogProviderTest {
               }
             });
     ServerMethodDefinition<?, ?> wDef = binlogProvider.wrapMethodDefinition(methodDef);
-    List<Object> serializedResp = new ArrayList<Object>();
+    List<Object> serializedResp = new ArrayList<>();
     ServerCall.Listener<?> wListener = startServerCallHelper(wDef, serializedResp);
 
     String expectedRequest = "hello world";
@@ -318,7 +317,7 @@ public class BinaryLogProviderTest {
                 public void onMessage(RespT message) {
                   assertTrue(message instanceof InputStream);
                   try {
-                    byte[] bytes = IoUtils.toByteArray((InputStream) message);
+                    byte[] bytes = ByteStreams.toByteArray((InputStream) message);
                     binlogResp.add(bytes);
                     ByteArrayInputStream input = new ByteArrayInputStream(bytes);
                     RespT dup = method.parseResponse(input);
@@ -371,7 +370,7 @@ public class BinaryLogProviderTest {
         public void onMessage(ReqT message) {
           assertTrue(message instanceof InputStream);
           try {
-            byte[] bytes = IoUtils.toByteArray((InputStream) message);
+            byte[] bytes = ByteStreams.toByteArray((InputStream) message);
             binlogReq.add(bytes);
             ByteArrayInputStream input = new ByteArrayInputStream(bytes);
             ReqT dup = call.getMethodDescriptor().parseRequest(input);

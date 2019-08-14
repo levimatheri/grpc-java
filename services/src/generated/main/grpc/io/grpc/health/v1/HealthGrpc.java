@@ -41,22 +41,52 @@ public final class HealthGrpc {
     if ((getCheckMethod = HealthGrpc.getCheckMethod) == null) {
       synchronized (HealthGrpc.class) {
         if ((getCheckMethod = HealthGrpc.getCheckMethod) == null) {
-          HealthGrpc.getCheckMethod = getCheckMethod = 
+          HealthGrpc.getCheckMethod = getCheckMethod =
               io.grpc.MethodDescriptor.<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.health.v1.Health", "Check"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Check"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Check"))
-                  .build();
-          }
+              .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Check"))
+              .build();
         }
-     }
-     return getCheckMethod;
+      }
+    }
+    return getCheckMethod;
+  }
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
+      io.grpc.health.v1.HealthCheckResponse> getWatchMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "Watch",
+      requestType = io.grpc.health.v1.HealthCheckRequest.class,
+      responseType = io.grpc.health.v1.HealthCheckResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
+  public static io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
+      io.grpc.health.v1.HealthCheckResponse> getWatchMethod() {
+    io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse> getWatchMethod;
+    if ((getWatchMethod = HealthGrpc.getWatchMethod) == null) {
+      synchronized (HealthGrpc.class) {
+        if ((getWatchMethod = HealthGrpc.getWatchMethod) == null) {
+          HealthGrpc.getWatchMethod = getWatchMethod =
+              io.grpc.MethodDescriptor.<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Watch"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Watch"))
+              .build();
+        }
+      }
+    }
+    return getWatchMethod;
   }
 
   /**
@@ -87,10 +117,36 @@ public final class HealthGrpc {
   public static abstract class HealthImplBase implements io.grpc.BindableService {
 
     /**
+     * <pre>
+     * If the requested service is unknown, the call will fail with status
+     * NOT_FOUND.
+     * </pre>
      */
     public void check(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       asyncUnimplementedUnaryCall(getCheckMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Performs a watch for the serving status of the requested service.
+     * The server will immediately send back a message indicating the current
+     * serving status.  It will then subsequently send a new message whenever
+     * the service's serving status changes.
+     * If the requested service is unknown when the call is received, the
+     * server will send a message setting the serving status to
+     * SERVICE_UNKNOWN but will *not* terminate the call.  If at some
+     * future point, the serving status of the service becomes known, the
+     * server will send a new message with the service's serving status.
+     * If the call terminates with status UNIMPLEMENTED, then clients
+     * should assume this method is not supported and should not retry the
+     * call.  If the call terminates with any other status (including OK),
+     * clients should retry the call with appropriate exponential backoff.
+     * </pre>
+     */
+    public void watch(io.grpc.health.v1.HealthCheckRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
+      asyncUnimplementedUnaryCall(getWatchMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
@@ -102,6 +158,13 @@ public final class HealthGrpc {
                 io.grpc.health.v1.HealthCheckRequest,
                 io.grpc.health.v1.HealthCheckResponse>(
                   this, METHODID_CHECK)))
+          .addMethod(
+            getWatchMethod(),
+            asyncServerStreamingCall(
+              new MethodHandlers<
+                io.grpc.health.v1.HealthCheckRequest,
+                io.grpc.health.v1.HealthCheckResponse>(
+                  this, METHODID_WATCH)))
           .build();
     }
   }
@@ -125,11 +188,38 @@ public final class HealthGrpc {
     }
 
     /**
+     * <pre>
+     * If the requested service is unknown, the call will fail with status
+     * NOT_FOUND.
+     * </pre>
      */
     public void check(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       asyncUnaryCall(
           getChannel().newCall(getCheckMethod(), getCallOptions()), request, responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Performs a watch for the serving status of the requested service.
+     * The server will immediately send back a message indicating the current
+     * serving status.  It will then subsequently send a new message whenever
+     * the service's serving status changes.
+     * If the requested service is unknown when the call is received, the
+     * server will send a message setting the serving status to
+     * SERVICE_UNKNOWN but will *not* terminate the call.  If at some
+     * future point, the serving status of the service becomes known, the
+     * server will send a new message with the service's serving status.
+     * If the call terminates with status UNIMPLEMENTED, then clients
+     * should assume this method is not supported and should not retry the
+     * call.  If the call terminates with any other status (including OK),
+     * clients should retry the call with appropriate exponential backoff.
+     * </pre>
+     */
+    public void watch(io.grpc.health.v1.HealthCheckRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
+      asyncServerStreamingCall(
+          getChannel().newCall(getWatchMethod(), getCallOptions()), request, responseObserver);
     }
   }
 
@@ -152,10 +242,37 @@ public final class HealthGrpc {
     }
 
     /**
+     * <pre>
+     * If the requested service is unknown, the call will fail with status
+     * NOT_FOUND.
+     * </pre>
      */
     public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) {
       return blockingUnaryCall(
           getChannel(), getCheckMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Performs a watch for the serving status of the requested service.
+     * The server will immediately send back a message indicating the current
+     * serving status.  It will then subsequently send a new message whenever
+     * the service's serving status changes.
+     * If the requested service is unknown when the call is received, the
+     * server will send a message setting the serving status to
+     * SERVICE_UNKNOWN but will *not* terminate the call.  If at some
+     * future point, the serving status of the service becomes known, the
+     * server will send a new message with the service's serving status.
+     * If the call terminates with status UNIMPLEMENTED, then clients
+     * should assume this method is not supported and should not retry the
+     * call.  If the call terminates with any other status (including OK),
+     * clients should retry the call with appropriate exponential backoff.
+     * </pre>
+     */
+    public java.util.Iterator<io.grpc.health.v1.HealthCheckResponse> watch(
+        io.grpc.health.v1.HealthCheckRequest request) {
+      return blockingServerStreamingCall(
+          getChannel(), getWatchMethod(), getCallOptions(), request);
     }
   }
 
@@ -178,6 +295,10 @@ public final class HealthGrpc {
     }
 
     /**
+     * <pre>
+     * If the requested service is unknown, the call will fail with status
+     * NOT_FOUND.
+     * </pre>
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.health.v1.HealthCheckResponse> check(
         io.grpc.health.v1.HealthCheckRequest request) {
@@ -187,6 +308,7 @@ public final class HealthGrpc {
   }
 
   private static final int METHODID_CHECK = 0;
+  private static final int METHODID_WATCH = 1;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -207,6 +329,10 @@ public final class HealthGrpc {
       switch (methodId) {
         case METHODID_CHECK:
           serviceImpl.check((io.grpc.health.v1.HealthCheckRequest) request,
+              (io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse>) responseObserver);
+          break;
+        case METHODID_WATCH:
+          serviceImpl.watch((io.grpc.health.v1.HealthCheckRequest) request,
               (io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse>) responseObserver);
           break;
         default:
@@ -271,6 +397,7 @@ public final class HealthGrpc {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new HealthFileDescriptorSupplier())
               .addMethod(getCheckMethod())
+              .addMethod(getWatchMethod())
               .build();
         }
       }

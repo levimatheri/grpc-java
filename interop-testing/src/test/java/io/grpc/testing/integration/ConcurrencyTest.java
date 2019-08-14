@@ -26,7 +26,6 @@ import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
@@ -62,7 +61,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ConcurrencyTest {
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
+  @Rule public final Timeout globalTimeout = Timeout.seconds(60);
   
   /**
    * A response observer that signals a {@code CountDownLatch} when the proper number of responses
@@ -110,8 +109,7 @@ public class ConcurrencyTest {
     public void run() {
       try {
         // Prepare the request.
-        StreamingOutputCallRequest.Builder requestBuilder = StreamingOutputCallRequest.newBuilder()
-            .setResponseType(PayloadType.RANDOM);
+        StreamingOutputCallRequest.Builder requestBuilder = StreamingOutputCallRequest.newBuilder();
         for (int i = 0; i < NUM_RESPONSES_PER_REQUEST; i++) {
           requestBuilder.addResponseParameters(ResponseParameters.newBuilder()
               .setSize(1000)

@@ -3,12 +3,12 @@
 # Build protoc
 set -evux -o pipefail
 
-PROTOBUF_VERSION=3.5.1
+PROTOBUF_VERSION=3.9.0
 
 # ARCH is 64 bit unless otherwise specified.
 ARCH="${ARCH:-64}"
 DOWNLOAD_DIR=/tmp/source
-INSTALL_DIR="/tmp/protobuf-$PROTOBUF_VERSION/$(uname -s)-$(uname -p)-x86_$ARCH"
+INSTALL_DIR="/tmp/protobuf-cache/$PROTOBUF_VERSION/$(uname -s)-$(uname -p)-x86_$ARCH"
 mkdir -p $DOWNLOAD_DIR
 
 # Start with a sane default
@@ -35,7 +35,7 @@ else
     --prefix="$INSTALL_DIR"
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
   make clean
-  make -j$NUM_CPU
+  make V=0 -j$NUM_CPU
   make install
   popd
 fi

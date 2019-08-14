@@ -29,10 +29,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -43,6 +44,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.io.BaseEncoding;
+import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -71,7 +73,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -90,7 +92,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @SuppressWarnings("unchecked")
   private MethodDescriptor.Marshaller<Void> marshaller = mock(MethodDescriptor.Marshaller.class);
-  private final Queue<InputStream> listenerMessageQueue = new LinkedList<InputStream>();
+  private final Queue<InputStream> listenerMessageQueue = new LinkedList<>();
 
   // Must be initialized before @Before, because it is used by createStream()
   private MethodDescriptor<?, ?> methodDescriptor = MethodDescriptor.<Void, Void>newBuilder()
@@ -122,7 +124,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
             }
           })
       .when(listener)
-      .messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Override
@@ -417,7 +419,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT);
     stream.start(listener);
     stream().transportState().setId(STREAM_ID);
     verify(listener, never()).onReady();
@@ -435,8 +438,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     Mockito.reset(writeQueue);
     ChannelPromise completedPromise = new DefaultChannelPromise(channel)
         .setSuccess();
-    when(writeQueue.enqueue(any(QueuedCommand.class), any(boolean.class)))
-        .thenReturn(completedPromise);
+    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(completedPromise);
 
     stream = new NettyClientStream(
         new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
@@ -447,7 +449,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("good agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT);
     stream.start(listener);
 
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
@@ -476,7 +479,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT);
     stream.start(listener);
     stream.transportState().setId(STREAM_ID);
     stream.transportState().setHttp2Stream(http2Stream);
@@ -508,9 +512,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT);
     stream.start(listener);
-    stream.transportState().setId(STREAM_ID);
     stream.transportState().setHttp2Stream(http2Stream);
     reset(listener);
     return stream;
@@ -546,7 +550,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   private class TransportStateImpl extends NettyClientStream.TransportState {
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
-      super(handler, channel.eventLoop(), maxMessageSize, StatsTraceContext.NOOP, transportTracer);
+      super(
+          handler,
+          channel.eventLoop(),
+          maxMessageSize,
+          StatsTraceContext.NOOP,
+          transportTracer,
+          "methodName");
     }
 
     @Override

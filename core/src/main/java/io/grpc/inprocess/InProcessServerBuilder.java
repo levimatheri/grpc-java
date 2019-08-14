@@ -19,6 +19,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
@@ -27,6 +28,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import java.io.File;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
@@ -91,8 +93,9 @@ public final class InProcessServerBuilder
     return UUID.randomUUID().toString();
   }
 
-  private final String name;
-  private ObjectPool<ScheduledExecutorService> schedulerPool =
+  final String name;
+  int maxInboundMetadataSize = Integer.MAX_VALUE;
+  ObjectPool<ScheduledExecutorService> schedulerPool =
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
   private InProcessServerBuilder(String name) {
@@ -118,15 +121,53 @@ public final class InProcessServerBuilder
    */
   public InProcessServerBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-    schedulerPool = new FixedObjectPool<ScheduledExecutorService>(
+    schedulerPool = new FixedObjectPool<>(
         checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
     return this;
   }
 
+  /**
+   * Provides a custom deadline ticker that this server will use to create incoming {@link
+   * Deadline}s.
+   *
+   * <p>This is intended for unit tests that fake out the clock.  You should also have a fake {@link
+   * ScheduledExecutorService} whose clock is synchronized with this ticker and set it to {@link
+   * #scheduledExecutorService}. DO NOT use this in production.
+   *
+   * @return this
+   * @see Deadline#after(long, TimeUnit, Deadline.Ticker)
+   *
+   * @since 1.24.0
+   */
+  public InProcessServerBuilder deadlineTicker(Deadline.Ticker ticker) {
+    setDeadlineTicker(ticker);
+    return this;
+  }
+
+  /**
+   * Sets the maximum size of metadata allowed to be received. {@code Integer.MAX_VALUE} disables
+   * the enforcement. Defaults to no limit ({@code Integer.MAX_VALUE}).
+   *
+   * <p>There is potential for performance penalty when this setting is enabled, as the Metadata
+   * must actually be serialized. Since the current implementation of Metadata pre-serializes, it's
+   * currently negligible. But Metadata is free to change its implementation.
+   *
+   * @param bytes the maximum size of received metadata
+   * @return this
+   * @throws IllegalArgumentException if bytes is non-positive
+   * @since 1.17.0
+   */
   @Override
-  protected InProcessServer buildTransportServer(
-      List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return new InProcessServer(name, schedulerPool, streamTracerFactories);
+  public InProcessServerBuilder maxInboundMetadataSize(int bytes) {
+    Preconditions.checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
+    this.maxInboundMetadataSize = bytes;
+    return this;
+  }
+
+  @Override
+  protected List<InProcessServer> buildTransportServers(
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+    return Collections.singletonList(new InProcessServer(this, streamTracerFactories));
   }
 
   @Override

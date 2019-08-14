@@ -17,11 +17,8 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.BinaryLog;
-import io.grpc.BinaryLog.CallId;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -34,6 +31,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.StreamTracer;
+import io.opencensus.trace.BlankSpan;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.MessageEvent;
 import io.opencensus.trace.MessageEvent.Type;
@@ -42,7 +40,7 @@ import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
-import java.nio.ByteBuffer;
+import io.opencensus.trace.unsafe.ContextUtils;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -244,9 +242,12 @@ final class CensusTracingModule {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
-      headers.discardAll(tracingHeader);
-      headers.put(tracingHeader, span.getContext());
+    public ClientStreamTracer newClientStreamTracer(
+        ClientStreamTracer.StreamInfo info, Metadata headers) {
+      if (span != BlankSpan.INSTANCE) {
+        headers.discardAll(tracingHeader);
+        headers.put(tracingHeader, span.getContext());
+      }
       return new ClientTracer(span);
     }
 
@@ -341,7 +342,7 @@ final class CensusTracingModule {
       // Access directly the unsafe trace API to create the new Context. This is a safe usage
       // because gRPC always creates a new Context for each of the server calls and does not
       // inherit from the parent Context.
-      return context.withValue(CONTEXT_SPAN_KEY, span);
+      return ContextUtils.withValue(context, span);
     }
 
     @Override
@@ -381,17 +382,12 @@ final class CensusTracingModule {
       // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
       // as Tracer.getCurrentSpan() except when no value available when the return value is null
       // for the direct access and BlankSpan when Tracer API is used.
-      final ClientCallTracer tracerFactory = newClientCallTracer(CONTEXT_SPAN_KEY.get(), method);
+      final ClientCallTracer tracerFactory =
+          newClientCallTracer(ContextUtils.getValue(Context.current()), method);
       ClientCall<ReqT, RespT> call =
           next.newCall(
               method,
-              callOptions.withStreamTracerFactory(tracerFactory)
-                  .withOption(
-                      BinaryLog.CLIENT_CALL_ID_CALLOPTION_KEY,
-                      new CallId(
-                          0,
-                          ByteBuffer.wrap(
-                              tracerFactory.span.getContext().getSpanId().getBytes()).getLong())));
+              callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {

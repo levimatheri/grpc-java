@@ -29,7 +29,7 @@ android {
     // Android Studio 3.1 does not automatically pick up '<src_set>/kotlin' as source input
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
-        main.java.srcDirs += 'src/test/kotlin'
+        test.java.srcDirs += 'src/test/kotlin'
         androidTest.java.srcDirs += 'src/androidTest/kotlin'
     }
 
@@ -49,10 +49,10 @@ android {
 }
 
 protobuf {
-    protoc { artifact = 'com.google.protobuf:protoc:3.5.1-1' }
+    protoc { artifact = 'com.google.protobuf:protoc:3.9.0' }
     plugins {
         javalite { artifact = "com.google.protobuf:protoc-gen-javalite:3.0.0" }
-        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.15.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
@@ -67,14 +67,14 @@ protobuf {
 }
 
 dependencies {
-    compile 'com.android.support:appcompat-v7:27.0.2'
-    compile 'javax.annotation:javax.annotation-api:1.2'
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation 'com.android.support:appcompat-v7:27.0.2'
+    implementation 'javax.annotation:javax.annotation-api:1.2'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 
     // You need to build grpc-java to obtain these libraries below.
-    compile 'io.grpc:grpc-okhttp:1.15.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    compile 'io.grpc:grpc-protobuf-lite:1.15.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    compile 'io.grpc:grpc-stub:1.15.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-okhttp:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-protobuf-lite:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-stub:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 }
 
 repositories { mavenCentral() }

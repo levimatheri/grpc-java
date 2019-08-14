@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import android.annotation.SuppressLint;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Verify;
 import io.grpc.Attributes;
@@ -63,10 +64,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
   @Nullable
   @SuppressWarnings("LiteralClassName")
   private static Throwable initJndi() {
-    if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
-      return new UnsupportedOperationException(
-          "Currently running in an AppEngine restricted environment");
-    }
     try {
       Class.forName("javax.naming.directory.InitialDirContext");
       Class.forName("com.sun.jndi.dns.DnsContextFactory");
@@ -86,7 +83,7 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
     if (unavailabilityCause() != null) {
       return null;
     }
-    return new JndiResourceResolver();
+    return new JndiResourceResolver(new JndiRecordFetcher());
   }
 
   @Nullable
@@ -96,27 +93,37 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
   }
 
   @VisibleForTesting
+  interface RecordFetcher {
+    List<String> getAllRecords(String recordType, String name) throws NamingException;
+  }
+
+  @VisibleForTesting
   static final class JndiResourceResolver implements DnsNameResolver.ResourceResolver {
     private static final Logger logger =
         Logger.getLogger(JndiResourceResolver.class.getName());
 
     private static final Pattern whitespace = Pattern.compile("\\s+");
 
+    private final RecordFetcher recordFetcher;
+
+    public JndiResourceResolver(RecordFetcher recordFetcher) {
+      this.recordFetcher = recordFetcher;
+    }
+
     @Override
     public List<String> resolveTxt(String serviceConfigHostname) throws NamingException {
-      checkAvailable();
       if (logger.isLoggable(Level.FINER)) {
         logger.log(
             Level.FINER, "About to query TXT records for {0}", new Object[]{serviceConfigHostname});
       }
       List<String> serviceConfigRawTxtRecords =
-          getAllRecords("TXT", "dns:///" + serviceConfigHostname);
+          recordFetcher.getAllRecords("TXT", "dns:///" + serviceConfigHostname);
       if (logger.isLoggable(Level.FINER)) {
         logger.log(
             Level.FINER, "Found {0} TXT records", new Object[]{serviceConfigRawTxtRecords.size()});
       }
       List<String> serviceConfigTxtRecords =
-          new ArrayList<String>(serviceConfigRawTxtRecords.size());
+          new ArrayList<>(serviceConfigRawTxtRecords.size());
       for (String serviceConfigRawTxtRecord : serviceConfigRawTxtRecords) {
         serviceConfigTxtRecords.add(unquote(serviceConfigRawTxtRecord));
       }
@@ -126,32 +133,40 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
     @Override
     public List<EquivalentAddressGroup> resolveSrv(
         AddressResolver addressResolver, String grpclbHostname) throws Exception {
-      checkAvailable();
       if (logger.isLoggable(Level.FINER)) {
         logger.log(
             Level.FINER, "About to query SRV records for {0}", new Object[]{grpclbHostname});
       }
       List<String> grpclbSrvRecords =
-          getAllRecords("SRV", "dns:///" + grpclbHostname);
+          recordFetcher.getAllRecords("SRV", "dns:///" + grpclbHostname);
       if (logger.isLoggable(Level.FINER)) {
         logger.log(
             Level.FINER, "Found {0} SRV records", new Object[]{grpclbSrvRecords.size()});
       }
       List<EquivalentAddressGroup> balancerAddresses =
-          new ArrayList<EquivalentAddressGroup>(grpclbSrvRecords.size());
+          new ArrayList<>(grpclbSrvRecords.size());
       Exception first = null;
       Level level = Level.WARNING;
       for (String srvRecord : grpclbSrvRecords) {
         try {
           SrvRecord record = parseSrvRecord(srvRecord);
+          // SRV requires the host name to be absolute
+          if (!record.host.endsWith(".")) {
+            throw new RuntimeException("Returned SRV host does not end in period: " + record.host);
+          }
 
+          // Strip trailing dot for appearance's sake. It _should_ be fine either way, but most
+          // people expect to see it without the dot.
+          String authority = record.host.substring(0, record.host.length() - 1);
+          // But we want to use the trailing dot for the IP lookup. The dot makes the name absolute
+          // instead of relative and so will avoid the search list like that in resolv.conf.
           List<? extends InetAddress> addrs = addressResolver.resolveAddress(record.host);
-          List<SocketAddress> sockaddrs = new ArrayList<SocketAddress>(addrs.size());
+          List<SocketAddress> sockaddrs = new ArrayList<>(addrs.size());
           for (InetAddress addr : addrs) {
             sockaddrs.add(new InetSocketAddress(addr, record.port));
           }
           Attributes attrs = Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, record.host)
+              .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, authority)
               .build();
           balancerAddresses.add(
               new EquivalentAddressGroup(Collections.unmodifiableList(sockaddrs), attrs));
@@ -176,8 +191,7 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       return Collections.unmodifiableList(balancerAddresses);
     }
 
-    @VisibleForTesting
-    static final class SrvRecord {
+    private static final class SrvRecord {
       SrvRecord(String host, int port) {
         this.host = host;
         this.port = port;
@@ -187,22 +201,58 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       final int port;
     }
 
-    @VisibleForTesting
-    @SuppressWarnings("BetaApi") // Verify is only kinda beta
-    static SrvRecord parseSrvRecord(String rawRecord) {
+    private static SrvRecord parseSrvRecord(String rawRecord) {
       String[] parts = whitespace.split(rawRecord);
       Verify.verify(parts.length == 4, "Bad SRV Record: %s", rawRecord);
       return new SrvRecord(parts[3], Integer.parseInt(parts[2]));
     }
 
-    @IgnoreJRERequirement
-    private static List<String> getAllRecords(String recordType, String name)
-        throws NamingException {
+    /**
+     * Undo the quoting done in {@link com.sun.jndi.dns.ResourceRecord#decodeTxt}.
+     */
+    @VisibleForTesting
+    static String unquote(String txtRecord) {
+      StringBuilder sb = new StringBuilder(txtRecord.length());
+      boolean inquote = false;
+      for (int i = 0; i < txtRecord.length(); i++) {
+        char c = txtRecord.charAt(i);
+        if (!inquote) {
+          if (c == ' ') {
+            continue;
+          } else if (c == '"') {
+            inquote = true;
+            continue;
+          }
+        } else {
+          if (c == '"') {
+            inquote = false;
+            continue;
+          } else if (c == '\\') {
+            c = txtRecord.charAt(++i);
+            assert c == '"' || c == '\\';
+          }
+        }
+        sb.append(c);
+      }
+      return sb.toString();
+    }
+  }
+
+  @VisibleForTesting
+  @IgnoreJRERequirement
+  // javax.naming.* is only loaded reflectively and is never loaded for Android
+  // The lint issue id is supposed to be "InvalidPackage" but it doesn't work, don't know why.
+  // Use "all" as the lint issue id to suppress all types of lint error.
+  @SuppressLint("all")
+  static final class JndiRecordFetcher implements RecordFetcher {
+    @Override
+    public List<String> getAllRecords(String recordType, String name) throws NamingException {
+      checkAvailable();
       String[] rrType = new String[]{recordType};
-      List<String> records = new ArrayList<String>();
+      List<String> records = new ArrayList<>();
 
       @SuppressWarnings("JdkObsolete")
-      Hashtable<String, String> env = new Hashtable<String, String>();
+      Hashtable<String, String> env = new Hashtable<>();
       env.put("com.sun.jndi.ldap.connect.timeout", "5000");
       env.put("com.sun.jndi.ldap.read.timeout", "5000");
       DirContext dirContext = new InitialDirContext(env);
@@ -237,7 +287,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       return records;
     }
 
-    @IgnoreJRERequirement
     private static void closeThenThrow(NamingEnumeration<?> namingEnumeration, NamingException e)
         throws NamingException {
       try {
@@ -248,7 +297,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       throw e;
     }
 
-    @IgnoreJRERequirement
     private static void closeThenThrow(DirContext ctx, NamingException e) throws NamingException {
       try {
         ctx.close();
@@ -256,36 +304,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
         // ignore
       }
       throw e;
-    }
-
-    /**
-     * Undo the quoting done in {@link com.sun.jndi.dns.ResourceRecord#decodeTxt}.
-     */
-    @VisibleForTesting
-    static String unquote(String txtRecord) {
-      StringBuilder sb = new StringBuilder(txtRecord.length());
-      boolean inquote = false;
-      for (int i = 0; i < txtRecord.length(); i++) {
-        char c = txtRecord.charAt(i);
-        if (!inquote) {
-          if (c == ' ') {
-            continue;
-          } else if (c == '"') {
-            inquote = true;
-            continue;
-          }
-        } else {
-          if (c == '"') {
-            inquote = false;
-            continue;
-          } else if (c == '\\') {
-            c = txtRecord.charAt(++i);
-            assert c == '"' || c == '\\';
-          }
-        }
-        sb.append(c);
-      }
-      return sb.toString();
     }
 
     private static void checkAvailable() {

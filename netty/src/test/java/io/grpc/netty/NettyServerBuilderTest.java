@@ -19,14 +19,20 @@ package io.grpc.netty;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.truth.Truth;
+import io.grpc.ServerStreamTracer.Factory;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
+import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
 
 /**
  * Unit tests for {@link NettyServerBuilder}.
@@ -37,6 +43,14 @@ public class NettyServerBuilderTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
+
+  @Test
+  public void createMultipleServers() {
+    builder.addListenAddress(new InetSocketAddress(8081));
+    List<NettyServer> servers = builder.buildTransportServers(ImmutableList.<Factory>of());
+
+    Truth.assertThat(servers).hasSize(2);
+  }
 
   @Test
   public void sslContextCanBeNull() {
@@ -78,11 +92,11 @@ public class NettyServerBuilderTest {
   }
 
   @Test
-  public void failIfMaxHeaderListSizeNegative() {
+  public void failIfMaxInboundMetadataSizeNonPositive() {
     thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("maxHeaderListSize must be > 0");
+    thrown.expectMessage("maxInboundMetadataSize must be > 0");
 
-    builder.maxHeaderListSize(0);
+    builder.maxInboundMetadataSize(0);
   }
 
   @Test
@@ -115,5 +129,60 @@ public class NettyServerBuilderTest {
     thrown.expectMessage("permit keepalive time must be non-negative");
 
     builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_onlyBossGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_onlyWorkerGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_onlyTypeProvided() {
+    builder.channelType(LocalServerChannel.class);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_usingDefault() {
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_allProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+    builder.channelType(LocalServerChannel.class);
+
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void useNioTransport_shouldNotThrow() {
+    InternalNettyServerBuilder.useNioTransport(builder);
+
+    builder.assertEventLoopsAndChannelType();
   }
 }
